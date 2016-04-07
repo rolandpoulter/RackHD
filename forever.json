@@ -1,0 +1,38 @@
+[
+  {
+    "uid": "on-dhcp-proxy",
+    "fifo": true,
+    "script": "index.js",
+    "sourceDir": "/RackHD/on-http"
+  },
+  {
+    "uid": "on-http",
+    "fifo": true,
+    "script": "index.js",
+    "sourceDir": "/RackHD/on-http"
+  },
+  {
+    "uid": "on-http",
+    "fifo": true,
+    "script": "index.js",
+    "sourceDir": "/RackHD/on-http"
+  },
+  {
+    "uid": "on-http",
+    "fifo": true,
+    "script": "index.js",
+    "sourceDir": "/RackHD/on-http"
+  },
+  {
+    "uid": "on-http",
+    "fifo": true,
+    "script": "index.js",
+    "sourceDir": "/RackHD/on-http"
+  },
+  {
+    "uid": "on-http",
+    "fifo": true,
+    "script": "index.js",
+    "sourceDir": "/RackHD/on-http"
+  }
+]

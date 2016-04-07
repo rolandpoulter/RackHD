@@ -1,0 +1,23 @@
+{
+  "name": "RackHD",
+  "version": "0.0.0",
+  "description": "RackHD",
+  "main": "index.js",
+  "scripts": {
+    "start": "forever start ./forever.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RackHD/RackHD.git"
+  },
+  "author": "",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/RackHD/RackHD/issues"
+  },
+  "homepage": "https://github.com/RackHD/RackHD",
+  "dependencies": {},
+  "devDependencies": {
+    "forever": "0.15.1"
+  }
+}
