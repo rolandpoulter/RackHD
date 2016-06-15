@@ -1,0 +1,71 @@
+machine:
+  services:
+    - docker
+    - mongodb
+    - rabbitmq-server
+    - elasticsearch
+checkout:
+  post:
+    - git submodule sync
+    - git submodule update --init
+    - ./scripts/reset_submodules.bash
+dependencies:
+  cache_directories:
+    - "~/rackhd"
+  override:
+    - if [[ -e ~/rackhd/on-core.tar ]]; then docker load -i ~/rackhd/on-core.tar; fi
+    - if [[ -e ~/rackhd/on-dhcp-proxy.tar ]]; then docker load -i ~/rackhd/on-dhcp-proxy.tar; fi
+    - if [[ -e ~/rackhd/on-http.tar ]]; then docker load -i ~/rackhd/on-http.tar; fi
+    - if [[ -e ~/rackhd/on-statsd.tar ]]; then docker load -i ~/rackhd/on-statsd.tar; fi
+    - if [[ -e ~/rackhd/on-syslog.tar ]]; then docker load -i ~/rackhd/on-syslog.tar; fi
+    - if [[ -e ~/rackhd/on-taskgraph.tar ]]; then docker load -i ~/rackhd/on-taskgraph.tar; fi
+    - if [[ -e ~/rackhd/on-tftp.tar ]]; then docker load -i ~/rackhd/on-tftp.tar; fi
+    - if [[ -e ~/rackhd/on-wss.tar ]]; then docker load -i ~/rackhd/on-wss.tar; fi
+    - if [[ -e ~/rackhd/isc-dhcp-server.tar ]]; then docker load -i ~/rackhd/isc-dhcp-server.tar; fi
+    - if [[ -e ~/rackhd/files.tar ]]; then docker load -i ~/rackhd/files.tar; fi
+    - cd ./on-core && docker build -t rackhd/on-core .
+    - cd ./on-dhcp-proxy && docker build -t rackhd/on-dhcp-proxy .
+    - cd ./on-http && docker build -t rackhd/on-http .
+    - cd ./on-statsd && docker build -t rackhd/on-statsd .
+    - cd ./on-syslog && docker build -t rackhd/on-syslog .
+    - cd ./on-taskgraph && docker build -t rackhd/on-taskgraph .
+    - cd ./on-tftp && docker build -t rackhd/on-tftp .
+    - cd ./on-wss && docker build -t rackhd/on-wss .
+    - cd ./docker/dhcp && docker build -t rackhd/isc-dhcp-server .
+    - cd ./docker/files && docker build -t rackhd/files .
+    - mkdir -p ~/rackhd
+    - docker save rackhd/on-core > ~/rackhd/on-core.tar
+    - docker save rackhd/on-dhcp-proxy > ~/rackhd/on-dhcp-proxy.tar
+    - docker save rackhd/on-http > ~/rackhd/on-http.tar
+    - docker save rackhd/on-statsd > ~/rackhd/on-statsd.tar
+    - docker save rackhd/on-syslog > ~/rackhd/on-syslog.tar
+    - docker save rackhd/on-taskgraph > ~/rackhd/on-taskgraph.tar
+    - docker save rackhd/on-tftp > ~/rackhd/on-tftp.tar
+    - docker save rackhd/on-wss > ~/rackhd/on-wss.tar
+    - docker save rackhd/isc-dhcp-server > ~/rackhd/isc-dhcp-server.tar
+    - docker save rackhd/files > ~/rackhd/files.tar
+test:
+  override:
+    - docker run -d --name files -v ./docker/files/mount:/RackHD/files rackhd/files
+    - docker run -d --name dhcp --privileged=true --net="host" -v dhcp-leases:/var/lib/dhcp -v ./docker/dhcp/config:/etc/dhcp -v ./docker/dhcp/defaults:/etc/defaults rackhd/isc-dhcp-server
+    - docker run -d --name statsd --net="host" -v ./docker/monorail:/opt/monorail rackhd/on-statsd
+    - docker run -d --name http --privileged=true --net="host" -v /RackHD/docker/files/mount/common:/RackHD/on-http/static/http/common -v ./docker/monorail:/opt/monorail rackhd/on-http
+    - docker run -d --name dhcp-proxy --privileged=true --net="host" -v ./docker/monorail:/opt/monorail -v dhcp-leases:/var/lib/dhcp rackhd/on-dhcp-proxy
+    - docker run -d --name syslog --privileged=true --net="host" -v ./docker/monorail:/opt/monorail rackhd/on-syslog
+    - docker run -d --name tftp --privileged=true --net="host" -v ./docker/files/mount:/RackHD/on-tftp/static/tftp -v ./docker/monorail:/opt/monorail rackhd/on-tftp
+    - docker run -d --name taskgraph --net="host" -v ./docker/monorail:/opt/monorail rackhd/on-taskgraph
+    - docker ps -a
+    - sleep 60
+    - docker stop $(docker ps -q)
+    - docker logs dhcp
+    - docker logs statsd
+    - docker logs http
+    - docker logs dhcp-proxy
+    - docker logs tftp
+    - docker logs taskgraph
+# deployment:
+#   hub:
+#     branch: master
+#     commands:
+#       - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
+#       - docker push circleci/elasticsearch
