@@ -1,4 +1,6 @@
 machine:
+  node:
+    version: 6.2.2
   services:
     - docker
     - mongodb
@@ -13,6 +15,8 @@ dependencies:
   cache_directories:
     - "~/rackhd"
   override:
+    - sudo apt-get update && sudo apt-get install libpango1.0-0 && sudo apt-get install firefox xvfb
+    - npm install -g json
     - if [[ -e ~/rackhd/on-core.tar ]]; then docker load -i ~/rackhd/on-core.tar; fi
     - if [[ -e ~/rackhd/on-dhcp-proxy.tar ]]; then docker load -i ~/rackhd/on-dhcp-proxy.tar; fi
     - if [[ -e ~/rackhd/on-http.tar ]]; then docker load -i ~/rackhd/on-http.tar; fi
@@ -25,6 +29,8 @@ dependencies:
     - if [[ -e ~/rackhd/files.tar ]]; then docker load -i ~/rackhd/files.tar; fi
     - cd ./on-core && docker build -t rackhd/on-core .
     - cd ./on-dhcp-proxy && docker build -t rackhd/on-dhcp-proxy .
+    # hack to include curl in on-http
+    - sed -i 's/unzip/curl unzip/g' ./on-http/Dockerfile
     - cd ./on-http && docker build -t rackhd/on-http .
     - cd ./on-statsd && docker build -t rackhd/on-statsd .
     - cd ./on-syslog && docker build -t rackhd/on-syslog .
@@ -44,28 +50,64 @@ dependencies:
     - docker save rackhd/on-wss > ~/rackhd/on-wss.tar
     - docker save rackhd/isc-dhcp-server > ~/rackhd/isc-dhcp-server.tar
     - docker save rackhd/files > ~/rackhd/files.tar
+    - docker images
+    - cd ./on-core && npm install supertest sinon sinon-as-promised chai chai-as-promised sinon-chai && mv node_modules spec/node_modules
+    - ls ./on-core/spec
+    - cd ./on-web-ui && git fetch --all --prune && git reset --hard origin/master && npm install
+    - sed -i 's/172.31.128.1/127.0.0.1/g' ./docker/monorail/config.json
 test:
   override:
-    - docker run -d --name files -v ./docker/files/mount:/RackHD/files rackhd/files
-    - docker run -d --name dhcp --privileged=true --net="host" -v dhcp-leases:/var/lib/dhcp -v ./docker/dhcp/config:/etc/dhcp -v ./docker/dhcp/defaults:/etc/defaults rackhd/isc-dhcp-server
-    - docker run -d --name statsd --net="host" -v ./docker/monorail:/opt/monorail rackhd/on-statsd
-    - docker run -d --name http --privileged=true --net="host" -v /RackHD/docker/files/mount/common:/RackHD/on-http/static/http/common -v ./docker/monorail:/opt/monorail rackhd/on-http
-    - docker run -d --name dhcp-proxy --privileged=true --net="host" -v ./docker/monorail:/opt/monorail -v dhcp-leases:/var/lib/dhcp rackhd/on-dhcp-proxy
-    - docker run -d --name syslog --privileged=true --net="host" -v ./docker/monorail:/opt/monorail rackhd/on-syslog
-    - docker run -d --name tftp --privileged=true --net="host" -v ./docker/files/mount:/RackHD/on-tftp/static/tftp -v ./docker/monorail:/opt/monorail rackhd/on-tftp
-    - docker run -d --name taskgraph --net="host" -v ./docker/monorail:/opt/monorail rackhd/on-taskgraph
+    - docker run --rm --name http-test --privileged=true --net="host" -v "${PWD}/docker/files/mount/common:/RackHD/on-http/static/http/common" -v "${PWD}/docker/monorail:/opt/monorail" -v "${PWD}/on-core/spec:/RackHD/on-core/spec" -v "${PWD}/on-http/spec:/RackHD/on-http/spec" rackhd/on-http /bin/sh -c "npm install mocha rewire nock && npm test"
+    - mongo rackhd --eval "db.dropDatabase()"
+    - docker run --rm --name dhcp-proxy-test --privileged=true --net="host" -v "${PWD}/docker/monorail:/opt/monorail" -v dhcp-leases:/var/lib/dhcp -v "${PWD}/on-core/spec:/RackHD/on-core/spec" -v "${PWD}/on-dhcp-proxy/spec:/RackHD/on-dhcp-proxy/spec" rackhd/on-dhcp-proxy /bin/sh -c "npm install mocha && npm test"
+    - mongo rackhd --eval "db.dropDatabase()"
+    - docker run --rm --name syslog-test --privileged=true --net="host" -v "${PWD}/docker/monorail:/opt/monorail" -v "${PWD}/on-core/spec:/RackHD/on-core/spec" -v "${PWD}/on-syslog/spec:/RackHD/on-syslog/spec" rackhd/on-syslog /bin/sh -c "npm install mocha && npm test"
+    - mongo rackhd --eval "db.dropDatabase()"
+    - docker run --rm --name tftp-test --privileged=true --net="host" -v "${PWD}/docker/files/mount:/RackHD/on-tftp/static/tftp" -v "${PWD}/docker/monorail:/opt/monorail" -v "${PWD}/on-core/spec:/RackHD/on-core/spec" -v "${PWD}/on-tftp/spec:/RackHD/on-tftp/spec" rackhd/on-tftp /bin/sh -c "npm install mocha && npm test"
+    - mongo rackhd --eval "db.dropDatabase()"
+    - docker run --rm --name taskgraph-test --net="host" -v "${PWD}/docker/monorail:/opt/monorail" -v "${PWD}/on-core/spec:/RackHD/on-core/spec" -v "${PWD}/on-taskgraph/spec:/RackHD/on-taskgraph/spec" rackhd/on-taskgraph /bin/sh -c "npm install mocha && npm test"
+    - mongo rackhd --eval "db.dropDatabase()"
+    - docker run --rm --name wss-test --net="host" -v "${PWD}/docker/monorail:/opt/monorail" -v "${PWD}/on-core/spec:/RackHD/on-core/spec" -v "${PWD}/on-wss/spec:/RackHD/on-wss/spec" rackhd/on-wss /bin/sh -c "npm install mocha && npm test"
+    - mongo rackhd --eval "db.dropDatabase()"
+    # - docker run --rm --name statsd-test --net="host" -v "${PWD}/docker/monorail:/opt/monorail" -v "${PWD}/on-core/spec:/RackHD/on-core/spec" -v "${PWD}/on-statsd/spec:/RackHD/on-statsd/spec" rackhd/on-statsd /bin/sh -c "npm install mocha && npm test"
+    # - mongo rackhd --eval "db.dropDatabase()"
+    # - docker volume create --name dhcp-leases
+    - docker run -d --name files -v "${PWD}/docker/files/mount:/RackHD/files" rackhd/files
+    - docker run -d --name dhcp --privileged=true --net="host" -v dhcp-leases:/var/lib/dhcp -v "${PWD}/docker/dhcp/config:/etc/dhcp" -v "${PWD}/docker/dhcp/defaults:/etc/defaults" rackhd/isc-dhcp-server
+    - docker run -d --name statsd --net="host" -v "${PWD}/docker/monorail:/opt/monorail" rackhd/on-statsd
+    - docker run -d --name http --privileged=true --net="host" -v "${PWD}/docker/files/mount/common:/RackHD/on-http/static/http/common" -v "${PWD}/docker/monorail:/opt/monorail" rackhd/on-http
+    - docker run -d --name dhcp-proxy --privileged=true --net="host" -v "${PWD}/docker/monorail:/opt/monorail" -v dhcp-leases:/var/lib/dhcp rackhd/on-dhcp-proxy
+    - docker run -d --name syslog --privileged=true --net="host" -v "${PWD}/docker/monorail:/opt/monorail" rackhd/on-syslog
+    - docker run -d --name tftp --privileged=true --net="host" -v "${PWD}/docker/files/mount:/RackHD/on-tftp/static/tftp" -v "${PWD}/docker/monorail:/opt/monorail" rackhd/on-tftp
+    - docker run -d --name taskgraph --net="host" -v "${PWD}/docker/monorail:/opt/monorail" rackhd/on-taskgraph
+    - docker run -d --name wss --net="host" -v "${PWD}/docker/monorail:/opt/monorail" rackhd/on-wss
     - docker ps -a
-    - sleep 60
+    - sleep 90
+    - curl -s http://127.0.0.1:9090/api/1.1/config | json
+    - Xvfb -ac :99 -screen 0 1280x1024x16 :
+        background: true
+    - export DISPLAY=:99.0
+    - cd ./on-web-ui && npm run integration-test
     - docker stop $(docker ps -q)
     - docker logs dhcp
     - docker logs statsd
     - docker logs http
     - docker logs dhcp-proxy
     - docker logs tftp
+    - docker logs syslog
     - docker logs taskgraph
+    - docker logs wss
 # deployment:
 #   hub:
 #     branch: master
 #     commands:
 #       - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
-#       - docker push circleci/elasticsearch
+#       - docker push rackhd/files
+#       - docker push rackhd/dhcp
+#       - docker push rackhd/on-statsd
+#       - docker push rackhd/on-http
+#       - docker push rackhd/on-dhcp-proxy
+#       - docker push rackhd/on-syslog
+#       - docker push rackhd/on-tftp
+#       - docker push rackhd/on-taskgraph
+#       - docker push rackhd/on-wss
